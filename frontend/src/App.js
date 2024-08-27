@@ -4,7 +4,7 @@ import axios from 'axios';
 
 function App() {
 
-	const [question, setQuestion] = useState('What is your name?');
+	const [question, setQuestion] = useState('Where do you live?');
 	const [answer, setAnswer] = useState('');
 	const [isRecording, setIsRecording] = useState(false);
 	const [isProcessing, setIsProcessing] = useState(false);

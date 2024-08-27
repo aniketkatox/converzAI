@@ -3,119 +3,154 @@ import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
 function App() {
-  const [question, setQuestion] = useState('What is your name?');
-  const [answer, setAnswer] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
 
-  //Question text to speech
-  const playQuestion = async () => {
-    try {
-      const response = await axios.post('http://localhost:5000/api/text-to-speech', { text: question });
-      const audioSrc = `data:audio/mp3;base64,${response.data.audioContent}`;
-      const audio = new Audio(audioSrc);
-      audio.play();
-    } catch (error) {
-      console.error("Error in text-to-speech API:", error);
-      alert("Error playing question. Please try again.");
-    }
-  };
+	const [question, setQuestion] = useState('What is your name?');
+	const [answer, setAnswer] = useState('');
+	const [isRecording, setIsRecording] = useState(false);
+	const [isProcessing, setIsProcessing] = useState(false);
+	const mediaRecorderRef = useRef(null);
+	const audioChunksRef = useRef([]);
 
-  const toggleRecording = async () => {
-    if (!isRecording) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('Audio stream obtained:', stream);
+	//Question text to speech
+	const playQuestion = async () => {
 
-        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        console.log('MediaRecorder initialized:', recorder);
+		setAnswer('');
+		try {
 
-        recorder.ondataavailable = event => {
-          console.log('Audio chunk available:', event.data, 'Size:', event.data.size);
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
+			const response = await axios.post('http://localhost:5000/api/text-to-speech', { text: question });
+			const audioSrc = `data:audio/mp3;base64,${response.data.audioContent}`;
+			const audio = new Audio(audioSrc);
+			audio.play();
 
-        recorder.onstart = () => console.log('Recording started.');
-        recorder.onstop = () => {
-          console.log('Recording stopped.');
-          handleAudioData();
-        };
-        recorder.onerror = event => console.error('MediaRecorder error:', event.error);
+		} catch (error) {
 
-        recorder.start();
-        mediaRecorderRef.current = recorder;
-        setIsRecording(true);
-        audioChunksRef.current = []; // Clear previous audio chunks
-        console.log('Recording started.');
-      } catch (error) {
-        console.error("Error starting recording:", error);
-        alert("Error starting recording. Please check your microphone permissions.");
-      }
-    } else {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
+			console.error("Error in text-to-speech API:", error);
+		}
+	};
 
-  const handleAudioData = async () => {
-    if (audioChunksRef.current.length === 0) {
-      alert('No audio recorded.');
-      return;
-    }
+	// speech to text
+	const toggleRecording = async () => {
 
-    console.log("Processing audio data");
-    
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    console.log("AUDIO blob ", audioBlob);
-    const reader = new FileReader();
-    reader.readAsDataURL(audioBlob);
+		if (!isRecording) {
+			setAnswer('');  // Clearing the textbox when a new recording starts
 
-    reader.onloadend = async () => {
-      const base64data = reader.result.split(',')[1]; // Get base64 data
+			try {
 
-      try {
-        const response = await axios.post('http://localhost:5000/api/speech-to-text', {
-          audioContent: base64data,
-        });
+				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+				console.log('Audio stream obtained:', stream);
 
-        console.log("\n Transcription:", response.data.transcript);
+				const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+				console.log('MediaRecorder initialized:', recorder);
 
-        setAnswer(response.data.transcript);
-      } catch (error) {
-        console.error("Error in speech-to-text API:", error);
-        alert("Error in speech recognition. Please try again.");
-      }
-    };
-  };
+				recorder.ondataavailable = event => {
+					console.log('Audio chunk available:', event.data, 'Size:', event.data.size);
+					if (event.data.size > 0) {
+						audioChunksRef.current.push(event.data);
+					}
+				};
 
-  return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Speech Interaction App</h1>
-      </header>
-      <main>
-        <div className="question-section">
-          <h2>Question:</h2>
-          <p>{question}</p>
-          <button onClick={playQuestion}>Play Question</button>
-        </div>
+				recorder.onstart = () => console.log('Recording started.');
+				recorder.onstop = () => {
+					console.log('Recording stopped.');
+					handleAudioData();
+				};
 
-        <div className="recording-section">
-          <button onClick={toggleRecording}>
-            {isRecording ? 'Stop Recording' : 'Start Recording'}
-          </button>
-        </div>
+				recorder.onerror = event => console.error('MediaRecorder error:', event.error);
 
-        <div className="answer-section">
-          <h2>Your Answer:</h2>
-          <textarea value={answer} readOnly />
-        </div>
-      </main>
-    </div>
-  );
+				recorder.start();
+				mediaRecorderRef.current = recorder;
+				setIsRecording(true);
+				audioChunksRef.current = [];
+
+			} catch (error) {
+				alert("Error starting recording. Please check your microphone permissions.");
+			}
+
+		} else {
+
+			mediaRecorderRef.current.stop();
+			setIsRecording(false);
+
+		}
+	};
+
+	const handleAudioData = async () => {
+
+		if (audioChunksRef.current.length === 0) {
+			alert('No audio recorded.');
+			return;
+		}
+
+		const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+		const reader = new FileReader();
+		reader.readAsDataURL(audioBlob);
+
+		reader.onloadend = async () => {
+
+			const base64data = reader.result.split(',')[1];
+			setIsProcessing(true);
+
+			try {
+
+				const response = await axios.post('http://localhost:5000/api/speech-to-text', {
+					audioContent: base64data,
+				});
+
+				setAnswer(response.data.transcript);
+
+			} catch (error) {
+
+				alert("Error in speech recognition. Please try again.");
+
+			} finally {
+
+				setIsProcessing(false);
+
+			}
+		};
+	};
+
+	const handleClear = () => {
+
+		setAnswer('');
+
+	};
+
+	return (
+		<div className="App">
+
+			<header className="App-header">
+				<h1>Speech Interaction Website</h1>
+			</header>
+
+			<main>
+				
+				<div className="question-section">
+					<h2>Question:</h2>
+					<p>{question}</p>
+					<button onClick={playQuestion}>Play Question</button>
+				</div>
+
+				<div className="recording-section">
+					<button onClick={toggleRecording}>
+						{isRecording ? 'Stop Recording' : 'Start Recording'}
+					</button>
+				</div>
+
+				{isProcessing && <div>Processing...</div>}
+
+				<div className="answer-section">
+					<h2>Your Answer:</h2>
+					{answer}
+				</div>
+
+				<br></br>
+				<button onClick={handleClear}>Clear</button>
+
+			</main>
+
+		</div>
+	);
 }
 
 export default App;
